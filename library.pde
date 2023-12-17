@@ -1,3 +1,29 @@
+import java.util.Random;
+
+Grid grid;
+Grid3D grid3d;
+
+CigaretteTip cTip;
+int N = 128; // Grid size
+float dt = 1.0 / 120; // Time step
+// float dt = 1.0 / frameRate; // Time step
+float diff = 0.001; // Diffusion rate
+float visc = 0.001; // Viscosity
+boolean paused;
+
+// int U_FIELD = 0;
+// int V_FIELD = 1;
+// int W_FIELD = 2;
+// int D_FIELD = 3;
+int arraySize = (N+2) * (N+2);
+float[] antiGravity = new float[arraySize];
+float[] chaoticEffects = new float[arraySize];
+
+
+
+int IX(int i, int j) {
+  return i + (N + 2) * j;
+}
 
 
 public class Grid{
@@ -5,6 +31,9 @@ public class Grid{
   public float[] u, v, u_prev, v_prev;
   public float[] dens;
   public float[] dens_prev;
+  private float[] temp_for_swap;
+  private float[] age;
+  private float max_den = 45.0;
 
   public Grid(int n){
     this.n = n;
@@ -15,128 +44,504 @@ public class Grid{
     v_prev = new float[size];
     dens = new float[size];
     dens_prev = new float[size];
+    age = new float[size];
   }
 
-  int IX(int i, int j, int N) {
-    return i + (N + 2) * j;
-  }
+  void updateSmokeAge(float threshold) {
+    for (int i = 0; i < age.length; i++) {
+        if (dens[i] > 0) {
+            age[i]++;  // Increment the age if there is smoke
+        } else {
+            age[i] = 0;  // Reset age if no smoke
+        }
 
-  void swap(float[] a, float[] b) {
-    float[] temp = a.clone();
-    for (int i = 0; i < a.length; i++) {
-      a[i] = b[i];
-      b[i] = temp[i];
+        if (age[i] > threshold) {
+            dens[i] = 0;
+            age[i] = 0;
+        }
     }
   }
 
-  void add_source(int N, float[] x, float[] s, float dt) {
-    for (int i = 0; i < N * N; i++) {
+  void removeOldSmoke(float threshold) {
+    for (int i = 0; i < age.length; i++) {
+        if (age[i] > threshold) {
+            dens[i] = 0;
+            age[i] = 0;
+        }
+    }
+  }
+
+  // void integrate(float dt, float force){
+  //   for (i = 1; i <= n; i++) {
+  //     for (j = 1; j <= n; j++) {
+        
+  //       x[IX(i, j)] = (x0[IX(i, j)] + a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] +
+  //                       x[IX(i, j - 1)] + x[IX(i, j + 1)])) / (1 + 4 * a);
+  //     }
+  //   }
+  // }
+
+
+  // void addSmoke(int x, int y, float d_dens) {
+  //   int index = IX(x, y);
+  //   dens_prev[index] += d_dens;
+  //   // u_prev[index] += d_u;
+  //   // v_prev[index] += d_v;
+  //   // age[index] = 0;  // Reset age for new smoke
+  // }
+
+
+  void addSmoke(int x, int y, float d_u, float d_v, float d_dens) {
+    int index = IX(x, y);
+    dens_prev[index] += d_dens;
+    u_prev[index] += d_u;
+    v_prev[index] += d_v;
+    // age[index] = 0;  // Reset age for new smoke
+  }
+
+
+  int IX(int i, int j) {
+    return i + (n + 2) * j;
+  }
+
+  void add_source(float[] x, float[] s, float dt) {
+    for (int i = 0; i < n * n; i++) {
       x[i] += dt * s[i];
     }
   }
 
-  void diffuse(int N, int b, float[] x, float[] x0, float diff, float dt) {
+  void diffuse(int b, float[] x, float[] x0, float diff, float dt) {
     int i, j, k;
-    float a = dt * diff * N * N;
-    for (k = 0; k < 20; k++) {
-      for (i = 1; i <= N; i++) {
-        for (j = 1; j <= N; j++) {
-          x[IX(i, j, N)] = (x0[IX(i, j, N)] + a * (x[IX(i - 1, j, N)] + x[IX(i + 1, j, N)] +
-                          x[IX(i, j - 1, N)] + x[IX(i, j + 1, N)])) / (1 + 4 * a);
+    float a = dt * diff * n * n;
+    for (k = 0; k < 10; k++) {
+      for (i = 1; i <= n; i++) {
+        for (j = 1; j <= n; j++) {
+          x[IX(i, j)] = (x0[IX(i, j)] + a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] +
+                          x[IX(i, j - 1)] + x[IX(i, j + 1)])) / (1 + 4 * a);
         }
       }
-      set_bnd(N, b, x);
+      set_bnd(n, b, x);
     }
   }
 
-  void advect(int N, int b, float[] d, float[] d0, float[] u, float[] v, float dt) {
+  void advect(int b, float[] d, float[] d0, float[] u, float[] v, float dt) {
+    // b: a boundary condition identifier
+    // d: density array
+    // d0: Previous density array
+    // u: velocity array in x
+    // v: velocity array in y
+    // dt: time step
+
     int i, j, i0, j0, i1, j1;
     float x, y, s0, t0, s1, t1, dt0;
-    dt0 = dt * N;
-    for (i = 1; i <= N; i++) {
-      for (j = 1; j <= N; j++) {
-        x = i - dt0 * u[IX(i, j, N)];
-        y = j - dt0 * v[IX(i, j, N)];
-        if (x < 0.5) x = 0.5; if (x > N + 0.5) x = N + 0.5; i0 = (int) x; i1 = i0 + 1;
-        if (y < 0.5) y = 0.5; if (y > N + 0.5) y = N + 0.5; j0 = (int) y; j1 = j0 + 1;
-        s1 = x - i0; s0 = 1 - s1; t1 = y - j0; t0 = 1 - t1;
-        d[IX(i, j, N)] = s0 * (t0 * d0[IX(i0, j0, N)] + t1 * d0[IX(i0, j1, N)]) +
-                        s1 * (t0 * d0[IX(i1, j0, N)] + t1 * d0[IX(i1, j1, N)]);
+    dt0 = dt * n;
+    for (i = 1; i <= n; i++) {
+      for (j = 1; j <= n; j++) {
+        x = i - dt0 * u[IX(i, j)];
+        y = j - dt0 * v[IX(i, j)];
+        if (x < 0.5) x = 0.5; if (x > n + 0.5) x = n + 0.5; i0 = (int) x; i1 = i0 + 1;
+        if (y < 0.5) y = 0.5; if (y > n + 0.5) y = n + 0.5; j0 = (int) y; j1 = j0 + 1;
+        s1 = x - i0; s0 = 1 - s1; t1 = y - j0; t0 = 1 - t1; // bilinear intepolation
+        d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
+                        s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
       }
     }
+
     set_bnd(N, b, d);
   }
 
-  void dens_step(int N, float[] x, float[] x0, float[] u, float[] v, float diff, float dt) {
-  add_source(N, x, x0, dt);
-  swap(x0, x); 
-  diffuse(N, 0, x, x0, diff, dt);
-  swap(x0, x); 
-  advect(N, 0, x, x0, u, v, dt);
-}
+  void dens_step(float[] x, float[] x0, float[] u, float[] v, float diff, float dt) {
+    add_source(x, x0, dt);
 
-  void vel_step(int N, float[] u, float[] v, float[] u0, float[] v0, float visc, float dt) {
-    add_source(N, u, u0, dt);
-    add_source(N, v, v0, dt);
-    swap(u0, u);
-    diffuse(N, 1, u, u0, visc, dt);
-    swap(v0, v);
-    diffuse(N, 2, v, v0, visc, dt);
-    project(N, u, v, u0, v0);
-    swap(u0, u);
-    swap(v0, v);
-    advect(N, 1, u, u0, u0, v0, dt);
-    advect(N, 2, v, v0, u0, v0, dt);
-    project(N, u, v, u0, v0);
+    // swap(x0, x); 
+    temp_for_swap = x;
+    x = x0;
+    x0 = temp_for_swap;
+
+    diffuse(0, x, x0, diff, dt);
+
+    // swap(x0, x); 
+    temp_for_swap = x;
+    x = x0;
+    x0 = temp_for_swap;
+
+    advect(0, x, x0, u, v, dt);
   }
 
-  void project(int N, float[] u, float[] v, float[] p, float[] div) {
+  void vel_step(float[] u, float[] v, float[] u0, float[] v0, float visc, float dt) {
+    add_source(u, u0, dt);
+    add_source(v, v0, dt);
+
+    // swap(u0, u);
+    temp_for_swap = u;
+    u = u0;
+    u0 = temp_for_swap;
+
+    diffuse(1, u, u0, visc, dt);
+
+    // swap(u0, u);
+    temp_for_swap = v;
+    v = v0;
+    v0 = temp_for_swap;
+
+    diffuse(2, v, v0, visc, dt);
+
+    project(u, v, u0, v0);
+
+    // swap(u0, u);
+    temp_for_swap = u;
+    u = u0;
+    u0 = temp_for_swap;
+
+    // swap(v0, v);
+    temp_for_swap = v;
+    v = v0;
+    v0 = temp_for_swap;
+
+    advect(1, u, u0, u0, v0, dt);
+    advect(2, v, v0, u0, v0, dt);
+    project(u, v, u0, v0);
+  }
+
+  void project(float[] u, float[] v, float[] p, float[] div) {
+    // extract the gradient field from velocity field to obtain incompressible field
     int i, j, k;
-    float h = 1.0 / N;
-    for (i = 1; i <= N; i++) {
-      for (j = 1; j <= N; j++) {
-        div[IX(i, j, N)] = -0.5 * h * (u[IX(i + 1, j, N)] - u[IX(i - 1, j, N)] +
-                                      v[IX(i, j + 1, N)] - v[IX(i, j - 1, N)]);
-        p[IX(i, j, N)] = 0;
+    float h = 1.0 / n;
+    for (i = 1; i <= n; i++) {
+      for (j = 1; j <= n; j++) {
+        div[IX(i, j)] = -0.5 * h * (u[IX(i + 1, j)] - u[IX(i - 1, j)] +
+                                      v[IX(i, j + 1)] - v[IX(i, j - 1)]);
+        p[IX(i, j)] = 0;
       }
     }
+
     set_bnd(N, 0, div);
     set_bnd(N, 0, p);
+
     for (k = 0; k < 20; k++) {
-      for (i = 1; i <= N; i++) {
-        for (j = 1; j <= N; j++) {
-          p[IX(i, j, N)] = (div[IX(i, j, N)] + p[IX(i - 1, j, N)] + p[IX(i + 1, j, N)] +
-                            p[IX(i, j - 1, N)] + p[IX(i, j + 1, N)]) / 4;
+      for (i = 1; i <= n; i++) {
+        for (j = 1; j <= n; j++) {
+          p[IX(i, j)] = (div[IX(i, j)] + p[IX(i - 1, j)] + p[IX(i + 1, j)] +
+                            p[IX(i, j - 1)] + p[IX(i, j + 1)]) / 4;
         }
       }
       set_bnd(N, 0, p);
     }
-    for (i = 1; i <= N; i++) {
-      for (j = 1; j <= N; j++) {
-        u[IX(i, j, N)] -= 0.5 * (p[IX(i + 1, j, N)] - p[IX(i - 1, j, N)]) / h;
-        v[IX(i, j, N)] -= 0.5 * (p[IX(i, j + 1, N)] - p[IX(i, j - 1, N)]) / h;
+    for (i = 1; i <= n; i++) {
+      for (j = 1; j <= n; j++) {
+        u[IX(i, j)] -= 0.5 * (p[IX(i + 1, j)] - p[IX(i - 1, j)]) / h;
+        v[IX(i, j)] -= 0.5 * (p[IX(i, j + 1)] - p[IX(i, j - 1)]) / h;
       }
     }
     set_bnd(N, 1, u);
     set_bnd(N, 2, v);
   }
 
+
+
   void set_bnd(int N, int b, float[] x) {
     int i;
     for (i = 1; i <= N; i++) {
-      x[IX(0, i, N)] = b == 1 ? -x[IX(1, i, N)] : x[IX(1, i, N)];
-      x[IX(N + 1, i, N)] = b == 1 ? -x[IX(N, i, N)] : x[IX(N, i, N)];
-      x[IX(i, 0, N)] = b == 2 ? -x[IX(i, 1, N)] : x[IX(i, 1, N)];
-      x[IX(i, N + 1, N)] = b == 2 ? -x[IX(i, N, N)] : x[IX(i, N, N)];
+      x[IX(0, i)] = b == 1 ? -x[IX(1, i)] : x[IX(1, i)];
+      x[IX(N + 1, i)] = b == 1 ? -x[IX(N, i)] : x[IX(N, i)];
+      x[IX(i, 0)] = b == 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
+      x[IX(i, N + 1)] = b == 2 ? -x[IX(i, N)] : x[IX(i, N)];
     }
-    x[IX(0, 0, N)] = 0.5 * (x[IX(1, 0, N)] + x[IX(0, 1, N)]);
-    x[IX(0, N + 1, N)] = 0.5 * (x[IX(1, N + 1, N)] + x[IX(0, N, N)]);
-    x[IX(N + 1, 0, N)] = 0.5 * (x[IX(N, 0, N)] + x[IX(N + 1, 1, N)]);
-    x[IX(N + 1, N + 1, N)] = 0.5 * (x[IX(N, N + 1, N)] + x[IX(N + 1, N, N)]);
+    x[IX(0, 0)] = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
+    x[IX(0, N + 1)] = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
+    x[IX(N + 1, 0)] = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
+    x[IX(N + 1, N + 1)] = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
   }
+
+
 }
 
+public class CigaretteTip {
+    public int x, y;
+    public float u, v;
+    public float density;
+    private Random random;
+
+    public CigaretteTip(int x, int y) {
+        this.x = x;
+        this.y = y;
+        this.u = -10;
+        this.v = -2;
+        this.density = 100;
+        this.random = new Random();
+    }
+
+    public void updatePosition(int x, int y) {
+      this.x = x;
+      this.y = y;
+    }
+
+    public void randomize() {
+      this.u = (random.nextFloat() - 0.5f) * 2 * 4;
+      // this.v += (random.nextFloat() - 0.5f) * 2 * 10;
+      this.v = random.nextFloat() * -4;
+      // this.density += (random.nextFloat() - 0.5f) * 2 * 100;
+    }
+}
+
+
+
+
 float g = 9.81;
+
+
+
+public class Grid3D {
+  public int n;
+  public float[] u, v, w, u_prev, v_prev, w_prev;
+  public float[] dens;
+  public float[] dens_prev;
+  private float[] temp_for_swap;
+
+  public Grid3D(int n) {
+    this.n = n;
+    int size = (n + 2) * (n + 2) * (n + 2);
+    u = new float[size];
+    v = new float[size];
+    w = new float[size];
+    u_prev = new float[size];
+    v_prev = new float[size];
+    w_prev = new float[size];
+    dens = new float[size];
+    dens_prev = new float[size];
+  }
+
+  int IX(int i, int j, int k) {
+      return i + (n + 2) * (j + (n + 2) * k);
+  }
+
+  void add_source(float[] x, float[] source, float dt){
+    for (int i = 0; i < n * n * n; i++){
+      x[i] += dt * source[i];
+    }
+  }
+
+  void diffuse(int b, float[] x, float[] x0, float diff, float dt) {
+    float a = dt * diff * n * n * n; 
+
+    for (int iter = 0; iter < 20; iter++) {
+      for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= n; j++) {
+          for (int k = 1; k <= n; k++) {
+            x[IX(i, j, k)] = (x0[IX(i, j, k)] +
+                            a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
+                                  x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
+                                  x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) / (1 + 6 * a);
+          }
+        }
+      }
+      set_bnd(b, x);
+    }
+  }
+
+
+// void advect(int b, float[] d, float[] d0, float[] u, float[] v, float[] w, float dt) {
+//     int i, j, k, i0, j0, k0, i1, j1, k1;
+//     float x, y, z, s0, t0, r0, s1, t1, r1, dt0;
+
+//     dt0 = dt * n;
+//     for (i = 1; i <= n; i++) {
+//       for (j = 1; j <= n; j++) {
+//         for (k = 1; k <= n; k++) {
+//           x = i - dt0 * u[IX(i, j, k)];
+//           y = j - dt0 * v[IX(i, j, k)];
+//           z = k - dt0 * w[IX(i, j, k)];
+
+//           if (x < 0.5) x = 0.5;
+//           if (x > n + 0.5) x = n + 0.5;
+//           i0 = (int) x;
+//           i1 = i0 + 1;
+
+//           if (y < 0.5) y = 0.5;
+//           if (y > n + 0.5) y = n + 0.5;
+//           j0 = (int) y;
+//           j1 = j0 + 1;
+
+//           if (z < 0.5) z = 0.5;
+//           if (z > n + 0.5) z = n + 0.5;
+//           k0 = (int) z;
+//           k1 = k0 + 1;
+
+//           s1 = x - i0; s0 = 1 - s1;
+//           t1 = y - j0; t0 = 1 - t1;
+//           r1 = z - k0; r0 = 1 - r1;
+
+//           d[IX(i, j, k)] =
+//               s0 * (t0 * (r0 * d0[IX(i0, j0, k0)] + r1 * d0[IX(i0, j0, k1)]) +
+//                     t1 * (r0 * d0[IX(i0, j1, k0)] + r1 * d0[IX(i0, j1, k1)])) +
+//               s1 * (t0 * (r0 * d0[IX(i1, j0, k0)] + r1 * d0[IX(i1, j0, k1)]) +
+//                     t1 * (r0 * d0[IX(i1, j1, k0)] + r1 * d0[IX(i1, j1, k1)]));
+//         }
+//       }
+//     }
+//     set_bnd(b, d);
+//   }
+
+  void advect(int b, float[] d, float[] d0, float[] u, float[] v, float[] w, float dt) {
+    int i, j, k, i0, j0, k0, i1, j1, k1;
+    float x, y, z, s0, t0, r0, s1, t1, r1, dt0;
+
+    dt0 = dt * n;
+    for (i = 1; i <= n; i++) {
+        for (j = 1; j <= n; j++) {
+            for (k = 1; k <= n; k++) {
+                x = i - dt0 * u[IX(i, j, k)];
+                y = j - dt0 * v[IX(i, j, k)];
+                z = k - dt0 * w[IX(i, j, k)];
+                if (x < 0.5) x = 0.5; if (x > n + 0.5) x = n + 0.5; i0 = (int) x; i1 = i0 + 1;
+                if (y < 0.5) y = 0.5; if (y > n + 0.5) y = n + 0.5; j0 = (int) y; j1 = j0 + 1;
+                if (z < 0.5) z = 0.5; if (z > n + 0.5) z = n + 0.5; k0 = (int) z; k1 = k0 + 1;
+
+                s1 = x - i0; s0 = 1 - s1;
+                t1 = y - j0; t0 = 1 - t1;
+                r1 = z - k0; r0 = 1 - r1;
+
+                d[IX(i, j, k)] = 
+                    s0 * (t0 * (r0 * d0[IX(i0, j0, k0)] + r1 * d0[IX(i0, j0, k1)]) +
+                          t1 * (r0 * d0[IX(i0, j1, k0)] + r1 * d0[IX(i0, j1, k1)])) +
+                    s1 * (t0 * (r0 * d0[IX(i1, j0, k0)] + r1 * d0[IX(i1, j0, k1)]) +
+                          t1 * (r0 * d0[IX(i1, j1, k0)] + r1 * d0[IX(i1, j1, k1)]));
+            }
+        }
+    }
+    set_bnd(b, d);
+}
+
+
+void dens_step(float[] x, float[] x0, float[] u, float[] v, float[] w, float diff, float dt) {
+    add_source(x, x0, dt);
+
+    // Swap x0 and x for diffusion step
+    temp_for_swap = x;
+    x = x0;
+    x0 = temp_for_swap;
+
+    diffuse(0, x, x0, diff, dt);
+
+    // Swap x0 and x for advection step
+    temp_for_swap = x;
+    x = x0;
+    x0 = temp_for_swap;
+
+    advect(0, x, x0, u, v, w, dt);
+}
+
+void vel_step(float[] u, float[] v, float[] w, float[] u0, float[] v0, float[] w0, float visc, float dt) {
+    add_source(u, u0, dt);
+    add_source(v, v0, dt);
+    add_source(w, w0, dt);
+
+    // Swap for diffusion step
+    temp_for_swap = u;
+    u = u0;
+    u0 = temp_for_swap;
+
+    diffuse(1, u, u0, visc, dt);
+
+    temp_for_swap = v;
+    v = v0;
+    v0 = temp_for_swap;
+
+    diffuse(2, v, v0, visc, dt);
+
+    temp_for_swap = w;
+    w = w0;
+    w0 = temp_for_swap;
+
+    diffuse(3, w, w0, visc, dt);
+
+    project(u, v, w, u0, v0);
+
+    // Swap for advection step
+    temp_for_swap = u;
+    u = u0;
+    u0 = temp_for_swap;
+
+    temp_for_swap = v;
+    v = v0;
+    v0 = temp_for_swap;
+
+    temp_for_swap = w;
+    w = w0;
+    w0 = temp_for_swap;
+
+    advect(1, u, u0, u0, v0, w0, dt);
+    advect(2, v, v0, u0, v0, w0, dt);
+    advect(3, w, w0, u0, v0, w0, dt);
+
+    project(u, v, w, u0, v0);
+}
+
+
+void project(float[] u, float[] v, float[] w, float[] p, float[] div) {
+    int i, j, k;
+    float h = 1.0f / n;
+    for (i = 1; i <= n; i++) {
+        for (j = 1; j <= n; j++) {
+            for (k = 1; k <= n; k++) {
+                div[IX(i, j, k)] = -0.5f * h * (u[IX(i + 1, j, k)] - u[IX(i - 1, j, k)] +
+                                                v[IX(i, j + 1, k)] - v[IX(i, j - 1, k)] +
+                                                w[IX(i, j, k + 1)] - w[IX(i, j, k - 1)]);
+                p[IX(i, j, k)] = 0;
+            }
+        }
+    }
+    set_bnd(0, div);
+    set_bnd(0, p);
+
+    // Solve for pressure
+    for (int iter = 0; iter < 20; iter++) {
+        for (i = 1; i <= n; i++) {
+            for (j = 1; j <= n; j++) {
+                for (k = 1; k <= n; k++) {
+                    p[IX(i, j, k)] = (div[IX(i, j, k)] + p[IX(i - 1, j, k)] +
+                                        p[IX(i + 1, j, k)] + p[IX(i, j - 1, k)] +
+                                        p[IX(i, j + 1, k)] + p[IX(i, j, k - 1)] +
+                                        p[IX(i, j, k + 1)]) / 6.0f;
+                }
+            }
+        }
+        set_bnd(0, p);
+    }
+
+    // Subtract pressure gradient
+    for (i = 1; i <= n; i++) {
+        for (j = 1; j <= n; j++) {
+            for (k = 1; k <= n; k++) {
+                u[IX(i, j, k)] -= 0.5f * (p[IX(i + 1, j, k)] - p[IX(i - 1, j, k)]) / h;
+                v[IX(i, j, k)] -= 0.5f * (p[IX(i, j + 1, k)] - p[IX(i, j - 1, k)]) / h;
+                w[IX(i, j, k)] -= 0.5f * (p[IX(i, j, k + 1)] - p[IX(i, j, k - 1)]) / h;
+            }
+        }
+    }
+    set_bnd(1, u);
+    set_bnd(2, v);
+    set_bnd(3, w);
+}
+
+  void set_bnd(int b, float[] x) {
+      int i, j, k;
+      for (i = 1; i <= n; i++) {
+          for (j = 1; j <= n; j++) {
+              for (k = 1; k <= n; k++) {
+                  int ijk = IX(i, j, k);
+                  // Set boundaries for 3D case
+              }
+          }
+      }
+      // Handle corners and edges in the 3D case
+  }
+
+  // Add the third dimension to all other methods: diffuse, advect, project, etc.
+
+  // You will also need to extend the logic of each method to consider the 3D neighbors.
+}
+
 
 
 
