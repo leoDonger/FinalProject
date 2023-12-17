@@ -1,25 +1,17 @@
 import java.util.Random;
-
 Grid grid;
-Grid3D grid3d;
-
 CigaretteTip cTip;
-int N = 128; // Grid size
+int N = 258; // Grid size
 float dt = 1.0 / 120; // Time step
 // float dt = 1.0 / frameRate; // Time step
 float diff = 0.001; // Diffusion rate
 float visc = 0.001; // Viscosity
 boolean paused;
 
-// int U_FIELD = 0;
-// int V_FIELD = 1;
-// int W_FIELD = 2;
-// int D_FIELD = 3;
 int arraySize = (N+2) * (N+2);
+
 float[] antiGravity = new float[arraySize];
 float[] chaoticEffects = new float[arraySize];
-
-
 
 int IX(int i, int j) {
   return i + (N + 2) * j;
@@ -252,8 +244,6 @@ public class Grid{
     x[IX(N + 1, 0)] = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
     x[IX(N + 1, N + 1)] = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
   }
-
-
 }
 
 public class CigaretteTip {
@@ -291,6 +281,15 @@ float g = 9.81;
 
 
 
+
+
+
+
+
+int IX(int i, int j, int k) {
+    return i + (N + 2) * (j + (N + 2) * k);
+}
+
 public class Grid3D {
   public int n;
   public float[] u, v, w, u_prev, v_prev, w_prev;
@@ -311,14 +310,22 @@ public class Grid3D {
     dens_prev = new float[size];
   }
 
-  int IX(int i, int j, int k) {
-      return i + (n + 2) * (j + (n + 2) * k);
-  }
+
 
   void add_source(float[] x, float[] source, float dt){
     for (int i = 0; i < n * n * n; i++){
       x[i] += dt * source[i];
     }
+  }
+
+  void addSmoke(int x, int y, int z, float d_u, float d_v, float d_w, float d_dens) {
+    int index = IX(x, y);
+    dens_prev[index] += d_dens;
+    u_prev[index] += d_u;
+    v_prev[index] += d_v;
+    w_prev[index] += d_w;
+
+    // age[index] = 0;  // Reset age for new smoke
   }
 
   void diffuse(int b, float[] x, float[] x0, float diff, float dt) {
@@ -335,7 +342,7 @@ public class Grid3D {
           }
         }
       }
-      set_bnd(b, x);
+      // set_bnd(b, x);
     }
   }
 
@@ -409,7 +416,7 @@ public class Grid3D {
             }
         }
     }
-    set_bnd(b, d);
+    // set_bnd(b, d);
 }
 
 
@@ -430,6 +437,7 @@ void dens_step(float[] x, float[] x0, float[] u, float[] v, float[] w, float dif
 
     advect(0, x, x0, u, v, w, dt);
 }
+
 
 void vel_step(float[] u, float[] v, float[] w, float[] u0, float[] v0, float[] w0, float visc, float dt) {
     add_source(u, u0, dt);
@@ -491,8 +499,8 @@ void project(float[] u, float[] v, float[] w, float[] p, float[] div) {
             }
         }
     }
-    set_bnd(0, div);
-    set_bnd(0, p);
+    // set_bnd(0, div);
+    // set_bnd(0, p);
 
     // Solve for pressure
     for (int iter = 0; iter < 20; iter++) {
@@ -506,7 +514,7 @@ void project(float[] u, float[] v, float[] w, float[] p, float[] div) {
                 }
             }
         }
-        set_bnd(0, p);
+        // set_bnd(0, p);
     }
 
     // Subtract pressure gradient
@@ -519,27 +527,24 @@ void project(float[] u, float[] v, float[] w, float[] p, float[] div) {
             }
         }
     }
-    set_bnd(1, u);
-    set_bnd(2, v);
-    set_bnd(3, w);
+    // set_bnd(1, u);
+    // set_bnd(2, v);
+    // set_bnd(3, w);
 }
 
   void set_bnd(int b, float[] x) {
-      int i, j, k;
-      for (i = 1; i <= n; i++) {
-          for (j = 1; j <= n; j++) {
-              for (k = 1; k <= n; k++) {
-                  int ijk = IX(i, j, k);
-                  // Set boundaries for 3D case
-              }
-          }
-      }
-      // Handle corners and edges in the 3D case
+    int i;
+    for (i = 1; i <= N; i++) {
+      x[IX(0, i)] = b == 1 ? -x[IX(1, i)] : x[IX(1, i)];
+      x[IX(N + 1, i)] = b == 1 ? -x[IX(N, i)] : x[IX(N, i)];
+      x[IX(i, 0)] = b == 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
+      x[IX(i, N + 1)] = b == 2 ? -x[IX(i, N)] : x[IX(i, N)];
+    }
+    x[IX(0, 0)] = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
+    x[IX(0, N + 1)] = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
+    x[IX(N + 1, 0)] = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
+    x[IX(N + 1, N + 1)] = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
   }
-
-  // Add the third dimension to all other methods: diffuse, advect, project, etc.
-
-  // You will also need to extend the logic of each method to consider the 3D neighbors.
 }
 
 
@@ -649,8 +654,7 @@ Line collisionResponseStatic(Circle ball, Line line){
 
 // Camera
 
-class Camera
-{
+class Camera{
 Camera()
 {
   position      = new PVector( 0, 0, 0 ); // initial position
@@ -671,6 +675,7 @@ Camera()
   nearPlane        = 0.1;
   farPlane         = 10000;
 }
+
 void Update(float dt)
 {
   theta += turnSpeed * ( negativeTurn.x + positiveTurn.x)*dt;
