@@ -1,15 +1,29 @@
+import java.util.Iterator;
 import java.util.Random;
+import ddf.minim.*;
+
+Minim minim;
+AudioPlayer player;
+float playbackSpeed = 1.0;
+float speedIncrement = 0.01; // Adjust this value for speed change rate
+int bufferSize;
+float bufferIndex = 0;
+float energyBarrier = 0.001;
+float rateConstant = 0.001;
+
+
+
+Cigarette cig;
 Grid grid;
 CigaretteTip cTip;
-int N = 258; // Grid size
+int N = 256; // Grid size
 float dt = 1.0 / 120; // Time step
 // float dt = 1.0 / frameRate; // Time step
 float diff = 0.001; // Diffusion rate
-float visc = 0.001; // Viscosity
+float visc = 0.00001; // Viscosity
 boolean paused;
 
 int arraySize = (N+2) * (N+2);
-
 float[] antiGravity = new float[arraySize];
 float[] chaoticEffects = new float[arraySize];
 
@@ -17,15 +31,15 @@ int IX(int i, int j) {
   return i + (N + 2) * j;
 }
 
-
 public class Grid{
   public int n;
   public float[] u, v, u_prev, v_prev;
   public float[] dens;
   public float[] dens_prev;
   private float[] temp_for_swap;
-  private float[] age;
-  private float max_den = 45.0;
+
+  public float oxy, fuel, heat;
+  public float time;
 
   public Grid(int n){
     this.n = n;
@@ -36,31 +50,6 @@ public class Grid{
     v_prev = new float[size];
     dens = new float[size];
     dens_prev = new float[size];
-    age = new float[size];
-  }
-
-  void updateSmokeAge(float threshold) {
-    for (int i = 0; i < age.length; i++) {
-        if (dens[i] > 0) {
-            age[i]++;  // Increment the age if there is smoke
-        } else {
-            age[i] = 0;  // Reset age if no smoke
-        }
-
-        if (age[i] > threshold) {
-            dens[i] = 0;
-            age[i] = 0;
-        }
-    }
-  }
-
-  void removeOldSmoke(float threshold) {
-    for (int i = 0; i < age.length; i++) {
-        if (age[i] > threshold) {
-            dens[i] = 0;
-            age[i] = 0;
-        }
-    }
   }
 
   // void integrate(float dt, float force){
@@ -88,7 +77,6 @@ public class Grid{
     dens_prev[index] += d_dens;
     u_prev[index] += d_u;
     v_prev[index] += d_v;
-    // age[index] = 0;  // Reset age for new smoke
   }
 
 
@@ -247,312 +235,79 @@ public class Grid{
 }
 
 public class CigaretteTip {
-    public int x, y;
-    public float u, v;
-    public float density;
-    private Random random;
+  public float x, y;
+  public float u, v;
+  public float density;
+  private Random random;
 
-    public CigaretteTip(int x, int y) {
-        this.x = x;
-        this.y = y;
-        this.u = -10;
-        this.v = -2;
-        this.density = 100;
-        this.random = new Random();
-    }
-
-    public void updatePosition(int x, int y) {
-      this.x = x;
-      this.y = y;
-    }
-
-    public void randomize() {
-      this.u = (random.nextFloat() - 0.5f) * 2 * 4;
-      // this.v += (random.nextFloat() - 0.5f) * 2 * 10;
-      this.v = random.nextFloat() * -4;
-      // this.density += (random.nextFloat() - 0.5f) * 2 * 100;
-    }
-}
-
-
-
-
-float g = 9.81;
-
-
-
-
-
-
-
-
-int IX(int i, int j, int k) {
-    return i + (N + 2) * (j + (N + 2) * k);
-}
-
-public class Grid3D {
-  public int n;
-  public float[] u, v, w, u_prev, v_prev, w_prev;
-  public float[] dens;
-  public float[] dens_prev;
-  private float[] temp_for_swap;
-
-  public Grid3D(int n) {
-    this.n = n;
-    int size = (n + 2) * (n + 2) * (n + 2);
-    u = new float[size];
-    v = new float[size];
-    w = new float[size];
-    u_prev = new float[size];
-    v_prev = new float[size];
-    w_prev = new float[size];
-    dens = new float[size];
-    dens_prev = new float[size];
+  public CigaretteTip(float x, float y) {
+    this.x = x;
+    this.y = y;
+    this.u = -10;
+    this.v = -2;
+    this.density = 50;
+    this.random = new Random();
   }
 
-
-
-  void add_source(float[] x, float[] source, float dt){
-    for (int i = 0; i < n * n * n; i++){
-      x[i] += dt * source[i];
-    }
+  public void updatePosition(float x, float y) {
+    this.x = x;
+    this.y = y;
   }
 
-  void addSmoke(int x, int y, int z, float d_u, float d_v, float d_w, float d_dens) {
-    int index = IX(x, y);
-    dens_prev[index] += d_dens;
-    u_prev[index] += d_u;
-    v_prev[index] += d_v;
-    w_prev[index] += d_w;
-
-    // age[index] = 0;  // Reset age for new smoke
-  }
-
-  void diffuse(int b, float[] x, float[] x0, float diff, float dt) {
-    float a = dt * diff * n * n * n; 
-
-    for (int iter = 0; iter < 20; iter++) {
-      for (int i = 1; i <= n; i++) {
-        for (int j = 1; j <= n; j++) {
-          for (int k = 1; k <= n; k++) {
-            x[IX(i, j, k)] = (x0[IX(i, j, k)] +
-                            a * (x[IX(i - 1, j, k)] + x[IX(i + 1, j, k)] +
-                                  x[IX(i, j - 1, k)] + x[IX(i, j + 1, k)] +
-                                  x[IX(i, j, k - 1)] + x[IX(i, j, k + 1)])) / (1 + 6 * a);
-          }
-        }
-      }
-      // set_bnd(b, x);
-    }
-  }
-
-
-// void advect(int b, float[] d, float[] d0, float[] u, float[] v, float[] w, float dt) {
-//     int i, j, k, i0, j0, k0, i1, j1, k1;
-//     float x, y, z, s0, t0, r0, s1, t1, r1, dt0;
-
-//     dt0 = dt * n;
-//     for (i = 1; i <= n; i++) {
-//       for (j = 1; j <= n; j++) {
-//         for (k = 1; k <= n; k++) {
-//           x = i - dt0 * u[IX(i, j, k)];
-//           y = j - dt0 * v[IX(i, j, k)];
-//           z = k - dt0 * w[IX(i, j, k)];
-
-//           if (x < 0.5) x = 0.5;
-//           if (x > n + 0.5) x = n + 0.5;
-//           i0 = (int) x;
-//           i1 = i0 + 1;
-
-//           if (y < 0.5) y = 0.5;
-//           if (y > n + 0.5) y = n + 0.5;
-//           j0 = (int) y;
-//           j1 = j0 + 1;
-
-//           if (z < 0.5) z = 0.5;
-//           if (z > n + 0.5) z = n + 0.5;
-//           k0 = (int) z;
-//           k1 = k0 + 1;
-
-//           s1 = x - i0; s0 = 1 - s1;
-//           t1 = y - j0; t0 = 1 - t1;
-//           r1 = z - k0; r0 = 1 - r1;
-
-//           d[IX(i, j, k)] =
-//               s0 * (t0 * (r0 * d0[IX(i0, j0, k0)] + r1 * d0[IX(i0, j0, k1)]) +
-//                     t1 * (r0 * d0[IX(i0, j1, k0)] + r1 * d0[IX(i0, j1, k1)])) +
-//               s1 * (t0 * (r0 * d0[IX(i1, j0, k0)] + r1 * d0[IX(i1, j0, k1)]) +
-//                     t1 * (r0 * d0[IX(i1, j1, k0)] + r1 * d0[IX(i1, j1, k1)]));
-//         }
-//       }
-//     }
-//     set_bnd(b, d);
-//   }
-
-  void advect(int b, float[] d, float[] d0, float[] u, float[] v, float[] w, float dt) {
-    int i, j, k, i0, j0, k0, i1, j1, k1;
-    float x, y, z, s0, t0, r0, s1, t1, r1, dt0;
-
-    dt0 = dt * n;
-    for (i = 1; i <= n; i++) {
-        for (j = 1; j <= n; j++) {
-            for (k = 1; k <= n; k++) {
-                x = i - dt0 * u[IX(i, j, k)];
-                y = j - dt0 * v[IX(i, j, k)];
-                z = k - dt0 * w[IX(i, j, k)];
-                if (x < 0.5) x = 0.5; if (x > n + 0.5) x = n + 0.5; i0 = (int) x; i1 = i0 + 1;
-                if (y < 0.5) y = 0.5; if (y > n + 0.5) y = n + 0.5; j0 = (int) y; j1 = j0 + 1;
-                if (z < 0.5) z = 0.5; if (z > n + 0.5) z = n + 0.5; k0 = (int) z; k1 = k0 + 1;
-
-                s1 = x - i0; s0 = 1 - s1;
-                t1 = y - j0; t0 = 1 - t1;
-                r1 = z - k0; r0 = 1 - r1;
-
-                d[IX(i, j, k)] = 
-                    s0 * (t0 * (r0 * d0[IX(i0, j0, k0)] + r1 * d0[IX(i0, j0, k1)]) +
-                          t1 * (r0 * d0[IX(i0, j1, k0)] + r1 * d0[IX(i0, j1, k1)])) +
-                    s1 * (t0 * (r0 * d0[IX(i1, j0, k0)] + r1 * d0[IX(i1, j0, k1)]) +
-                          t1 * (r0 * d0[IX(i1, j1, k0)] + r1 * d0[IX(i1, j1, k1)]));
-            }
-        }
-    }
-    // set_bnd(b, d);
-}
-
-
-void dens_step(float[] x, float[] x0, float[] u, float[] v, float[] w, float diff, float dt) {
-    add_source(x, x0, dt);
-
-    // Swap x0 and x for diffusion step
-    temp_for_swap = x;
-    x = x0;
-    x0 = temp_for_swap;
-
-    diffuse(0, x, x0, diff, dt);
-
-    // Swap x0 and x for advection step
-    temp_for_swap = x;
-    x = x0;
-    x0 = temp_for_swap;
-
-    advect(0, x, x0, u, v, w, dt);
-}
-
-
-void vel_step(float[] u, float[] v, float[] w, float[] u0, float[] v0, float[] w0, float visc, float dt) {
-    add_source(u, u0, dt);
-    add_source(v, v0, dt);
-    add_source(w, w0, dt);
-
-    // Swap for diffusion step
-    temp_for_swap = u;
-    u = u0;
-    u0 = temp_for_swap;
-
-    diffuse(1, u, u0, visc, dt);
-
-    temp_for_swap = v;
-    v = v0;
-    v0 = temp_for_swap;
-
-    diffuse(2, v, v0, visc, dt);
-
-    temp_for_swap = w;
-    w = w0;
-    w0 = temp_for_swap;
-
-    diffuse(3, w, w0, visc, dt);
-
-    project(u, v, w, u0, v0);
-
-    // Swap for advection step
-    temp_for_swap = u;
-    u = u0;
-    u0 = temp_for_swap;
-
-    temp_for_swap = v;
-    v = v0;
-    v0 = temp_for_swap;
-
-    temp_for_swap = w;
-    w = w0;
-    w0 = temp_for_swap;
-
-    advect(1, u, u0, u0, v0, w0, dt);
-    advect(2, v, v0, u0, v0, w0, dt);
-    advect(3, w, w0, u0, v0, w0, dt);
-
-    project(u, v, w, u0, v0);
-}
-
-
-void project(float[] u, float[] v, float[] w, float[] p, float[] div) {
-    int i, j, k;
-    float h = 1.0f / n;
-    for (i = 1; i <= n; i++) {
-        for (j = 1; j <= n; j++) {
-            for (k = 1; k <= n; k++) {
-                div[IX(i, j, k)] = -0.5f * h * (u[IX(i + 1, j, k)] - u[IX(i - 1, j, k)] +
-                                                v[IX(i, j + 1, k)] - v[IX(i, j - 1, k)] +
-                                                w[IX(i, j, k + 1)] - w[IX(i, j, k - 1)]);
-                p[IX(i, j, k)] = 0;
-            }
-        }
-    }
-    // set_bnd(0, div);
-    // set_bnd(0, p);
-
-    // Solve for pressure
-    for (int iter = 0; iter < 20; iter++) {
-        for (i = 1; i <= n; i++) {
-            for (j = 1; j <= n; j++) {
-                for (k = 1; k <= n; k++) {
-                    p[IX(i, j, k)] = (div[IX(i, j, k)] + p[IX(i - 1, j, k)] +
-                                        p[IX(i + 1, j, k)] + p[IX(i, j - 1, k)] +
-                                        p[IX(i, j + 1, k)] + p[IX(i, j, k - 1)] +
-                                        p[IX(i, j, k + 1)]) / 6.0f;
-                }
-            }
-        }
-        // set_bnd(0, p);
-    }
-
-    // Subtract pressure gradient
-    for (i = 1; i <= n; i++) {
-        for (j = 1; j <= n; j++) {
-            for (k = 1; k <= n; k++) {
-                u[IX(i, j, k)] -= 0.5f * (p[IX(i + 1, j, k)] - p[IX(i - 1, j, k)]) / h;
-                v[IX(i, j, k)] -= 0.5f * (p[IX(i, j + 1, k)] - p[IX(i, j - 1, k)]) / h;
-                w[IX(i, j, k)] -= 0.5f * (p[IX(i, j, k + 1)] - p[IX(i, j, k - 1)]) / h;
-            }
-        }
-    }
-    // set_bnd(1, u);
-    // set_bnd(2, v);
-    // set_bnd(3, w);
-}
-
-  void set_bnd(int b, float[] x) {
-    int i;
-    for (i = 1; i <= N; i++) {
-      x[IX(0, i)] = b == 1 ? -x[IX(1, i)] : x[IX(1, i)];
-      x[IX(N + 1, i)] = b == 1 ? -x[IX(N, i)] : x[IX(N, i)];
-      x[IX(i, 0)] = b == 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
-      x[IX(i, N + 1)] = b == 2 ? -x[IX(i, N)] : x[IX(i, N)];
-    }
-    x[IX(0, 0)] = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
-    x[IX(0, N + 1)] = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
-    x[IX(N + 1, 0)] = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
-    x[IX(N + 1, N + 1)] = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
+  public void randomize() {
+    this.u = (random.nextFloat() - 0.5f) * 2 * 4;
+    this.v = random.nextFloat() * -4;
   }
 }
 
+public class Cigarette{
+  public Vec2 pos;
+  public float burningRate;
+  public CigaretteTip cTip;
+  public ParticleSystem ps;
+  public float frontPos;
 
 
+  public Circle cTipUI;
+  private float totalLength = 550;
+  private float frontLength = 400;
+  private float tipLength = 150;
+
+  public Cigarette(Vec2 pos, CigaretteTip cTip) {
+    this.pos = pos;
+    this.cTip = new CigaretteTip(pos.x - frontLength, pos.y);
+    frontPos = 0;
+    burningRate = 0.4;
+  }
+
+  void draw(){
+    float top = pos.y - 30;
+    float bottom = pos.y + 30;
+    if (frontPos <= frontLength){
+      frontPos += burningRate;
+      cTip.x += burningRate;
+      cTip.density += 0.05;
+    }else if(frontPos > frontLength){
+      cTip.density = 0;
+    }
+
+    // if(frontPos > 50){
+    //   player.play();
+    // }
+
+    
+    fill(255);
+    rect(pos.x - frontLength + frontPos, top, frontLength - frontPos, 60);
+    fill(255, 0, 0); // Red color for the lit end
+    ellipse(pos.x - frontLength + frontPos, pos.y, 20, 60);
 
 
-
-
+    fill(139, 69, 19); // Brown color for tobacco
+    rect(pos.x, top, tipLength, 60);
+    ellipse(pos.x, pos.y, 20, 60);
+    ellipse(pos.x + tipLength, pos.y, 20, 60);
+  }
+}
 
 
 // physics and shape
@@ -598,192 +353,15 @@ public class Circle{
  public String toString(){
    return center.toString();
  }
-}
 
-
-public boolean colliding(Line l, Circle c){ // check
- Vec2 toCircle1 = c.center.minus(l.pt1);
- Vec2 toCircle2 = c.center.minus(l.pt2);
- if (toCircle1.length() <= c.radius || toCircle2.length() <= c.radius) return true;
-
- float a = 1;  //Lenght of l_dir (we noramlized it)
- float b = -2*dot((l.vec()).normalized(),toCircle1); //-2*dot(l_dir,toCircle)
- float c_val = toCircle1.lengthSqr() - (c.radius)*(c.radius); //different of squared distances
-  
- float d = b*b - 4*a*c_val; //discriminant 
-  
- if (d >=0){ 
-   //If d is positive we know the line is colliding, but we need to check if the collision line within the line segment
-   //  ... this means t will be between 0 and the lenth of the line segment
-   float t1 = (-b - sqrt(d))/(2*a); //Optimization: we only take the first collision [is this safe?]
-   if (t1 > 0 && t1 < l.length()){
-     return true;
-   } 
+ public Vec2 getTop(){
+  return center.plus(new Vec2(0, -radius));
  }
- return false;
-}
 
-Line collisionResponseStatic(Circle ball, Line line){
- Vec2 v1 = ball.center.minus(line.pt1);
- Vec2 v2 = line.pt2.minus(line.pt1);
- float proj = dot(v2, v1) / v2.length();
- Vec2 closest = line.pt1.plus(v2.normalized().times(proj));
- Vec2 dist = ball.center.minus(closest);
-
- Vec2 normal = new Vec2(-v2.y, v2.x).normalized();
-
- float d = dot(normal, dist);
- if (d < 0){
-   normal.mul(-1);
+  public Vec2 getBottom(){
+  return center.plus(new Vec2(0, radius));
  }
- normal.mul(-1);
-
- Vec2 outside_point = ball.center.plus(normal.times(ball.radius));
-
- Vec2 new_pt2 = outside_point.minus(line.pt1).normalized().times(v2.length());
- return new Line(new_pt2, line.pt1);
- //float angle = atan2(new_pt2.y - line.pt1.y, new_pt2.x - line.pt1.x);
- // ball.center = closest.plus(normal.times(ball.radius));
- // Vec2 velNormal = normal.times(dot(ball.vel,normal));
- // ball.vel.subtract(velNormal.times(1 + cor));
- //return angle;
 }
-
-
-
-
-// Camera
-
-class Camera{
-Camera()
-{
-  position      = new PVector( 0, 0, 0 ); // initial position
-  theta         = 0; // rotation around Y axis. Starts with forward direction as ( 0, 0, -1 )
-  phi           = 0; // rotation around X axis. Starts with up direction as ( 0, 1, 0 )
-  moveSpeed     = 50;
-  turnSpeed     = 1.57; // radians/sec
-  boostSpeed    = 10;  // extra speed boost for when you press shift
-    
-  // dont need to change these
-  shiftPressed = false;
-  negativeMovement = new PVector( 0, 0, 0 );
-  positiveMovement = new PVector( 0, 0, 0 );
-  negativeTurn     = new PVector( 0, 0 ); // .x for theta, .y for phi
-  positiveTurn     = new PVector( 0, 0 );
-  fovy             = PI / 4;
-  aspectRatio      = width / (float) height;
-  nearPlane        = 0.1;
-  farPlane         = 10000;
-}
-
-void Update(float dt)
-{
-  theta += turnSpeed * ( negativeTurn.x + positiveTurn.x)*dt;
-    
-  // cap the rotation about the X axis to be less than 90 degrees to avoid gimble lock
-  float maxAngleInRadians = 85 * PI / 180;
-  phi = min( maxAngleInRadians, max( -maxAngleInRadians, phi + turnSpeed * ( negativeTurn.y + positiveTurn.y ) * dt ) );
-    
-  // re-orienting the angles to match the wikipedia formulas: https://en.wikipedia.org/wiki/Spherical_coordinate_system
-  // except that their theta and phi are named opposite
-  float t = theta + PI / 2;
-  float p = phi + PI / 2;
-  PVector forwardDir = new PVector( sin( p ) * cos( t ),   cos( p ),   -sin( p ) * sin ( t ) );
-  PVector upDir      = new PVector( sin( phi ) * cos( t ), cos( phi ), -sin( t ) * sin( phi ) );
-  PVector rightDir   = new PVector( cos( theta ), 0, -sin( theta ) );
-  PVector velocity   = new PVector( negativeMovement.x + positiveMovement.x, negativeMovement.y + positiveMovement.y, negativeMovement.z + positiveMovement.z );
-  position.add( PVector.mult( forwardDir, moveSpeed * velocity.z * dt ) );
-  position.add( PVector.mult( upDir,      moveSpeed * velocity.y * dt ) );
-  position.add( PVector.mult( rightDir,   moveSpeed * velocity.x * dt ) );
-    
-  aspectRatio = width / (float) height;
-  perspective( fovy, aspectRatio, nearPlane, farPlane );
-  camera( position.x, position.y, position.z,
-          position.x + forwardDir.x, position.y + forwardDir.y, position.z + forwardDir.z,
-          upDir.x, upDir.y, upDir.z );
-}
-  
-// only need to change if you want difrent keys for the controls
-void HandleKeyPressed()
-{
-  if ( key == 'w' || key == 'W' ) positiveMovement.z = 1;
-  if ( key == 's' || key == 'S' ) negativeMovement.z = -1;
-  if ( key == 'a' || key == 'A' ) negativeMovement.x = -1;
-  if ( key == 'd' || key == 'D' ) positiveMovement.x = 1;
-  if ( key == 'q' || key == 'Q' ) positiveMovement.y = 1;
-  if ( key == 'e' || key == 'E' ) negativeMovement.y = -1;
-    
-  if ( key == 'r' || key == 'R' ){
-   //  Camera defaults = new Camera();
-   //  position = defaults.position;
-   //  theta = defaults.theta;
-   //  phi = defaults.phi;
-  //  camera.position = new PVector(719.04254, 117.900024, 545.1439);
-  //  camera.theta = 0.131;
-  //  camera.phi = -0.6536;
-  }
-    
-  if ( keyCode == LEFT )  negativeTurn.x = 1;
-  if ( keyCode == RIGHT ) positiveTurn.x = -0.5;
-  if ( keyCode == UP )    positiveTurn.y = 0.5;
-  if ( keyCode == DOWN )  negativeTurn.y = -1;
-    
-  if ( keyCode == SHIFT ) shiftPressed = true; 
-  if (shiftPressed){
-    positiveMovement.mult(boostSpeed);
-    negativeMovement.mult(boostSpeed);
-  }
-
-  if ( key == 'p' || key == 'P'){
-    println("position:", position.x, position.y, position.z);
-    println("theta:", theta);
-    println("phi:", phi);
-
-  }
-}
-
-  void HandleKeyReleased()
-{
-  if ( key == 'w' || key == 'W' ) positiveMovement.z = 0;
-  if ( key == 'q' || key == 'Q' ) positiveMovement.y = 0;
-  if ( key == 'd' || key == 'D' ) positiveMovement.x = 0;
-  if ( key == 'a' || key == 'A' ) negativeMovement.x = 0;
-  if ( key == 's' || key == 'S' ) negativeMovement.z = 0;
-  if ( key == 'e' || key == 'E' ) negativeMovement.y = 0;
-    
-  if ( keyCode == LEFT  ) negativeTurn.x = 0;
-  if ( keyCode == RIGHT ) positiveTurn.x = 0;
-  if ( keyCode == UP    ) positiveTurn.y = 0;
-  if ( keyCode == DOWN  ) negativeTurn.y = 0;
-    
-  if ( keyCode == SHIFT ){
-    shiftPressed = false;
-    positiveMovement.mult(1.0/boostSpeed);
-    negativeMovement.mult(1.0/boostSpeed);
-  }
-}
-  
-// only necessary to change if you want different start position, orientation, or speeds
-PVector position;
-float theta;
-float phi;
-float moveSpeed;
-float turnSpeed;
-float boostSpeed;
-  
-// probably don't need / want to change any of the below variables
-float fovy;
-float aspectRatio;
-float nearPlane;
-float farPlane;  
-PVector negativeMovement;
-PVector positiveMovement;
-PVector negativeTurn;
-PVector positiveTurn;
-boolean shiftPressed;
-};
-
-
 
 
 public class Vec2 {
@@ -893,4 +471,68 @@ float clamp(float f, float min, float max){
  if (f < min) return min;
  if (f > max) return max;
  return f;
+}
+
+
+
+public class Particle{
+  Vec2 pos;
+  Vec2 vel;
+  float lifespan;
+
+  public Particle(Vec2 p){
+    pos = p;
+    vel = new Vec2(random(-20, 20), random(-50, 10));
+    lifespan = 255.0;
+  }
+
+  public void update() {
+    pos.add(vel);
+    lifespan -= 2.0;
+  }
+
+  public void draw() {
+    // stroke(255, lifespan);
+    fill(250, 100, 100, lifespan);
+    circle(pos.x, pos.y, 2.5*2);
+  }
+
+  public boolean isDead(){
+    return lifespan < 0;
+  }
+}
+
+
+
+class ParticleSystem {
+  ArrayList<Particle> particles;
+  Vec2 origin;
+
+  ParticleSystem(Vec2 pos) {
+    origin = pos;
+    particles = new ArrayList<Particle>();
+  }
+
+  void addParticle() {
+    for(int i = 0; i< 30; i++){
+      Vec2 random = new Vec2(origin.x + random(-20, 20), origin.y + random(-20, 20));
+      particles.add(new Particle(random));
+    }
+  }
+
+  void run() {
+    Iterator<Particle> it = particles.iterator();
+    while (it.hasNext()) {
+      Particle p = it.next();
+      p.update();
+      p.draw();
+      if (p.isDead()) {
+        it.remove();
+      }
+    }
+  }
+  
+  void clear(){
+    particles = new ArrayList<Particle>();
+  }
 }
