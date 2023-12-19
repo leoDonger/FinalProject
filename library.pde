@@ -8,17 +8,13 @@ Gain masterGain;
 Static rateUGen;
 float dyingRate = 1;
 
-;
-
-
-
 
 Cigarette cig;
 Grid grid;
 Grid fire;
 int N = 256; // Grid size
-float dt = 1.0 / 120; // Time step
-// float dt = 1.0 / frameRate; // Time step
+float dt = 1.0 / 120;
+// float dt = 1.0 / frameRate;
 float diff = 0.001; // Diffusion rate
 float visc = 0.01; // Viscosity
 boolean paused;
@@ -44,6 +40,8 @@ public class Grid{
   public float exothermicness, convectivness;
   public float viscC, diffC, diffC_Heat, diffC_O2;
   
+
+  // Professor Guy's code
   void updateFire(){
   // Compute the "burn equation" for each cell (O,F -> H)
     int nx = n+2;
@@ -85,6 +83,7 @@ public class Grid{
   }
 
 
+  // Based on Stam's explicit code
   public Grid(int n){
     this.n = n;
     int size = (n+2) * (n+2);
@@ -105,22 +104,20 @@ public class Grid{
     heat = new float[arraySize];
     heat_prev = new float[arraySize];
 
-    // Initialize physical constants
     energyBarrier = 1.0f;
     rateConstant = 0.1f;
     maxRate = 0.5f;
     exothermicness = 5.0f;
-    convectivness = 0.0001f;
+    convectivness = 0.001f;
     viscC = 0.001f;
     diffC = 0.001f;
     diffC_Heat = 0.001f;
     diffC_O2 = 0.001f;
 
-    // Set initial conditions for oxy, fuel, and heat
     for (int i = 0; i < arraySize; i++) {
-      oxy[i] = 1.0f; // Max oxygen everywhere
-      fuel[i] = 0.5f; // Some fuel everywhere
-      heat[i] = 0.0f; // No initial heat
+      oxy[i] = 1.0f; 
+      fuel[i] = 0.5f;
+      heat[i] = 0.0f;
     }
   }
 
@@ -324,7 +321,7 @@ public class Cigarette{
     this.pos = pos;
     this.cTip = new CigaretteTip(pos.x - frontLength, pos.y);
     frontPos = 0;
-    burningRate = 0.4;
+    burningRate = 0.2;
     ps = new ParticleSystem(new Vec2(pos.x - frontLength -10, pos.y));
 
   }
@@ -344,7 +341,6 @@ public class Cigarette{
     ps.addParticle(10, 30);
     if(frontPos > 50){
       ac.start();
-      // player.play();
     }
   }
 

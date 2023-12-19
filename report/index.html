@@ -1,0 +1,195 @@
+<!DOCTYPE HTML>
+<!--
+	Massively by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+	<head>
+		<title>Leo Dong's CSCI 5611 Final Project</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/main.css" />
+		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+	</head>
+	<body class="is-preload">
+
+		<!-- Wrapper -->
+			<div id="wrapper" class="fade-in">
+				<!-- Intro -->
+					<div id="intro">
+						<h1>Leo Dong's CSCI 5611 Final Project</h1>
+						<p>An Anti-Smoke Smoke Simulation</a>.</p>
+						<ul class="actions">
+							<li><a href="#header" class="button icon solid solo fa-arrow-down scrolly">Continue</a></li>
+						</ul>
+					</div>
+
+				<!-- Nav -->
+					<nav id="nav">
+						<ul class="links">
+							<li class="active"><a href="index.html">Report</a></li>
+						</ul>
+					</nav>
+
+				<!-- Main -->
+					<div id="main">
+
+						<!-- Featured Post -->
+							<article class="post featured">
+								<header class="major">
+									<h2><a>1&#41; Overview</a></h2>
+									<p>This report presents an implementation of smoke simulation in Processing as the final project for CSCI 5611, featuring Eulerian smoke simulation, particle system, and linear interpolation. The simulation aimed to create a real-time, realistic physics behavior of smoke, combining with an extremely obnoxious coughing sound effect in the background, ultimately advocating a cigarette-free lifestyle. While the final state of the project did not fully align with the initial design, with an efficient integration of the whole system in 3D, the simulation still offers a cool 2d visualization and provides user interaction to play with simulation. The final state of the project should align with Option 4 in project description </p>
+								</header>
+								<iframe width="560" height="315" src="https://www.youtube.com/embed/CngwcGjT-gg?si=DK2uJz7GfZPwk4-I" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+								<ul class="actions special">
+							        <a href="https://github.com/leoDonger/Project2/tree/master/project2">Source code</a>
+									</ul>
+								<header class="minor">
+									<h2><a>Description</a></h2>
+									<p>The Smoke effect is implemented with <strong>Eulerian Solution</strong> 
+										for Navier-Stokes equations, a grid-based approach for 
+										computaion and visualizaiton</p>
+									<p>The Phenomenon of the buring cigarette is constructed with
+										a burning rate and <strong>Linear Interpolation</strong>.
+									</p>
+									<p>The tip of the cigarette is simulated with <strong>Particle System</strong>, 
+										with a horizontal fading color from dark grey to red.</p>
+									<p>Some implemented <strong>interactive controls</strong> are: 
+										'R': Resets the simulation to its initial state.
+										Spacebar: Pauses or resumes the simulation.
+										'V' and 'B': Adjusts the viscosity rate.
+										'D' and 'F': Modifies the diffusion rate.
+										'N' and 'M': Controls the inhalation/burning speed of the simulated cigarette, 
+										which alternatively speed up/slow down the audio playing as well.
+										'L': Kills the audio.
+										Mouse Drag: Update the position of simulated cigarette.
+										Note: be sure to put the "cough.wav" file in the same directory as Processing.exe.
+									</p>
+									<p>
+										Some code and libraries I used are: <strong>Iterator</strong> for the construction of particle system, 
+										<strong>Random</strong> for random value generation, and <strong>Beads</strong> for the audio player in Processing;
+									</p>
+										
+								</header>
+							</article>
+
+						<!-- Featured Post -->
+						<article class="post featured">
+							<header class="major">
+								<h2><a>2&#41; Algorithms and Approaches</a></h2>
+								<p>AThe key algorithms I used for this project are based on Jos Stam’s published paper “Real-Time Fluid Dynamics for Games”[1] and Matthias Müller’s “Ten Minute Physics”[2]. The smoke simulation is grounded in the precise but complex physical equations that describe the flow of fluid, known as Navier-Stokes equations, as shown in Figure 1. The computational process of the equations can be simplified using an eulerian solution, where smoke properties like velocity and density are simulated on a grid rather than with particles. More specifically, a staggered grid is implemented, with the origins of properties located on the walls of the grid cells rather than the center of the grid cells, as depicted in Figure 2. 
+									The two equations in Figure 1 further indicate that there are two main steps that need to be taken in the simulation: the velocity step and density step. Additionally, each step consists of three sub-steps to construct realistic smoke movement and good visual result. They are source, diffusion, advection. “Source” simply involves adding velocity or density values from a certain source, such as a wind blowing across the screen or a smoke generator.  “Diffusion” is to spread the smoke in each grid cell to its neighbors, which can lead to a system of linear equations in a large number of grid cells. Gauss-Seidel relation, a repeated numerical function to solve the linear equation, can be used for this case. “Advection” moves the density field of the smoke along with the velocity field to simulate the smoke behavior. In the velocity step, it is particularly critical and important to have to maintain incompressible fluid/gas conditions, where the divergence is zero. To achieve this, the Helmholtz-Hodge method is used where the gradient field is simply subtracted from the velocity. For the numerical stability purpose, both Stam and Muller tracked the property values in the previous timestamp for use in the diffusion and advection.
+								</p>
+							</header>
+							<div>
+								<a class="image left"><img src="images/figure1.png" alt="" /></a>
+								<a class="image right"><img src="images/figure2.png" alt="" /></a>
+							</div>
+							<p><small>Figure 1: The Navier-Stokes Equations. &#40;Left&#41;</small></p>
+							<p><small>Figure 2: The visual configuration of a grid. &#40;Right&#41;</small></p>
+
+							<br>
+							<p><small>[1] Jos Stam, "Real-Time Fluid Dynamics for Games". Proceedings of the Game Developer Conference, March 2003.
+								[2] Matthias Müller - Ten Minute Physics. 17 - https://www.youtube.com/watch?v=iKAVRgIrUOU
+								</small></p>
+						</article>
+
+
+						<!-- Featured Post -->
+						<article class="post featured">
+							<header class="major">
+								<h2><a>3&#41; Connection and Bottlenecks</a></h2>
+								<p>My project is highly associated with Unit 2 of our course, focusing on physical simulation and specifically on stable Eulerian fluid dynamics simulation. It also incorporates elements from Unit 1. Overall, the project presents a real-time, interactive animation.
+									<br>
+									I did encounter computational bottlenecks due to the grid cell data structure. Scaling up the grid size significantly increased computational demands in all update steps, leading to overwhelming delays in rendering. This lag in each frame ultimately diminished the real-time visual effects. For example, the best visual result with smooth animation for my 2d simulation is constructed from a 256 x 256 grid, whereas scale up one time by a factor of 2 would cause computational instability. An experimental trial of 3d simulation ended with a limit of a 24 a 24 a 24 grid without the acceleration gpu. Furthermore, Processing lacks effective rendering methods in 3d without displaying super rigid shape and unrealistic smoke, as shown in the comparison in Figure 3 below.
+									</p>
+							</header>
+							<div>
+								<a class="image left"><img src="images/3d.png" alt="" /></a>
+								<a class="image right"><img src="images/2d.png" alt="" /></a>
+							</div>
+							<p><small>Figure 3: The comparison of best smoke visual effect in 3d and 2d in Processing</small></p>
+						</article>
+
+						<!-- Featured Post -->
+						<article class="post featured">
+							<header class="major">
+								<h2><a>4&#41; Progress</a></h2>
+								<p>Throughout my project development, I would say that I have stuck with the progress pretty well, as shown in Figure 4 and 5 below and Figure 3. I was able to recreate most of the elements from the midway updated sketch, including the smoke and cigarette. However, the progress went in unexpected directions when the 3D configuration turned out to be computationally expensive. The lit tip of the cigarette and the directional flow of the smoke were not being implemented.
+									</p>
+							</header>
+							<div>
+								<a class="image left"><img src="images/initial.jpg" alt="" /></a>
+								<a class="image right"><img src="images/midway.jpg" alt="" /></a>
+							</div>
+							<p><small>Figure 4: Initial sketch of the project. &#40;Left&#41;</small></p>
+							<p><small>Figure 5: Mid way updated sketch of the project. &#40;right&#41;</small></p>
+						</article>
+
+						<!-- Featured Post -->
+						<article class="post featured">
+							<header class="major">
+								<h2><a>5&#41; Feedback</a></h2>
+								<p>Some feedback from my peers during the progress report suggested optimizing the computational process with a spatial data structure, incorporating color shifting in smoke, implementing the system in 3D, and adding user interaction or obstacles. While I addressed some feedback in the final version, but not in the actual implementation. Firstly, I decided against colorful smoke as it didn’t align with the project's purpose. Vivid and lively colors might detract from the intended audience experience, potentially causing discomfort or obnoxiousness. Secondly, as previously mentioned, the 3D implementation was unsuccessful.. Some user interaction was added, including parameter tuning. This allows users to explore how different diffusion and viscosity rates affect the simulation. For optimal results, I used a medium-high diffusion rate and a low viscosity rate. This achieves an effect where the smoke spreads around but doesn’t behave like a drop of coffee in water, while maintaining low resistance to wind. Some examples of other parameter values are shown in the demo and Figure 6 below.</p>
+							</header>
+							<div>
+								<a class="image left"><img src="images/diff.png" alt="" /></a>
+								<a class="image right"><img src="images/visc.png" alt="" /></a>
+							</div>
+							<p><small>Figure 6: The visual result of having high diffusion rate &#40;Left&#41;</small></p>
+							<p><small>Figure 7: The visual result of having high viscosity rate &#40;right&#41;</small></p>
+						</article>
+
+						<!-- Featured Post -->
+						<article class="post featured">
+							<header class="major">
+								<h2><a>6&#41; State-of-the-art</a></h2>
+								<p>Compared to the ‘basic’ smoke simulation algorithm from Stam’s paper I initially used, some state-of-art techniques improve computational process or rendering. One notable example is the work of Hong et al., who introduced a technique integrating Deep Learning with super-resolution methods to downscale memory usage and provide  a high-resolution fluid/smoke simulation [3]. Their technique, compared to the original tempoGan without utilizing binarization, downscaling, and spatial partitioning, not only largely decreases the execution time but also yields results with significant performance improvement, as illustrated in Figure 8. Nonetheless, there are some limitations in their approach. The maximum efficiency of their algorithm is determined by the presence of low density cells, and there is no adaptivity of data as the deep learning network is configured from related research.
+									<br>
+									Another advanced technique is presented by S. Gagniere et al., who proposed an hybrid particle/grid approach for realistic incompressible fluid simulation. Compared to my use of staggered grids, they employed collocated grids instead by leveraging Newton's method. Then, they demonstrated the effectiveness of their Backward Semi-Lagrangian Quadratic B-spline velocity interpolation method, with visual results in Figure 9. In contrast to my typical fluid solver, their method for updating velocity and pressure stands out in current applications.
+									</p>
+							</header>
+
+							<a class="image main"><img src="images/tempoGAN.png" alt="" /></a>
+							<p><small>Figure 8: A visual result from Hong's "Super-Resolution With Deep Learning
+								on Downscaled and Binarized Space"</small></p>
+
+							<a class="image main"><img src="images/Hybrid.png" alt="" /></a>
+							<p><small>Figure 9: A visual result from S. Gagniere's "A Hybrid Lagrangian/Eulerian"</small></p>
+							<br>
+
+							<p><small>[3] B. -S. Hong, Q. Zhang, C. -H. Kim, J. Lee and J. -H. Kim, "Accelerated Smoke Simulation by Super-Resolution With Deep Learning on Downscaled and Binarized Space," in IEEE Access, vol. 9, pp. 98615-98629, 2021, doi: 10.1109/ACCESS.2021.3095904.
+							</p>
+							<p><small>[4] S. Gagniere, D. Hyde, A. Marquez-Razon, C. Jiang, Z. Ge, X. Han, Q. Guo, and J. Teran. 2020. A hybrid lagrangian/eulerian collocated velocity advection and projection method for fluid simulation. In Proceedings of the ACM SIGGRAPH/Eurographics Symposium on Computer Animation (SCA '20). Eurographics Association, Goslar, DEU, Article 1, 1–14. https://doi.org/10.1111/cgf.14096								
+								</small></p>
+						</article>
+
+
+						<!-- Featured Post -->
+						<article class="post featured">
+							<header class="major">
+								<h2><a>7&#41; Future</a></h2>
+								<p>In future work, I plan to transition the project to C++, JavaScript, or utilize an alternative graphical library. This change aims to reduce the software's impact on the simulation. Additionally, I believe that I would get past the computational bottleneck by implementing a spatial data structure, which was not implemented due to the time limit. Furthermore, the suggestion of incorporating obstacles into the simulation will definitely be applied.</p>
+							</header>
+						</article>
+
+
+				<!-- Copyright -->
+					<div id="copyright">
+						<ul><li>&copy; Untitled</li><li>Design: <a href="https://html5up.net">HTML5 UP</a></li></ul>
+					</div>
+
+			</div>
+
+		<!-- Scripts -->
+			<script src="assets/js/jquery.min.js"></script>
+			<script src="assets/js/jquery.scrollex.min.js"></script>
+			<script src="assets/js/jquery.scrolly.min.js"></script>
+			<script src="assets/js/browser.min.js"></script>
+			<script src="assets/js/breakpoints.min.js"></script>
+			<script src="assets/js/util.js"></script>
+			<script src="assets/js/main.js"></script>
+
+	</body>
+</html>

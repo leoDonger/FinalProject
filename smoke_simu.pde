@@ -95,12 +95,37 @@ void keyPressed()
 {
  if (key == ' ') {
   paused = !paused;
- }else if(key == 'd' || key == 'D'){
+ }else if(key == 'r' || key == 'R'){
+  grid = new Grid(N);
+  paused = true;
+  println("reset");
+  cig = new Cigarette(new Vec2(1000, 768));
+  diff = 0.001;
+  visc = 0.01;
+  player.kill();
+  ac = new AudioContext();
+  try {
+    Sample sample = new Sample("cough.wav");
+    player = new SamplePlayer(ac, sample);
+    player.setLoopType(SamplePlayer.LoopType.LOOP_FORWARDS);
+
+    rateUGen = new Static(ac, 1.0f);
+    player.setRate(rateUGen);
+
+    masterGain = new Gain(ac, 2, 0.5f);
+    masterGain.addInput(player);
+    ac.out.addInput(masterGain);
+
+    } catch (Exception e) {
+    println("Error loading audio file: " + e.getMessage());
+  }
+ }
+ else if(key == 'd' || key == 'D'){
   println("Increase diffusion Rate!");
-  diff *= 10;
+  diff *= 2;
  }else if(key == 'f' || key == 'F'){
   println("Decrease diffusion Rate!");
-  diff /= 10;
+  diff /= 2;
  }else if(key == 'v' || key == 'V'){
   println("Increase Viscosity Rate!");
   visc *= 10;
@@ -109,14 +134,16 @@ void keyPressed()
   visc /= 10;
  }else if(key == 'n' || key == 'N'){
   println("Speed up the burning rate of the cigarette!");
-  cig.burningRate *= 2;
+  cig.burningRate *= 1.5;
   rateUGen.setValue(rateUGen.getValue() + 0.2f);
   dyingRate *= 2;
  }else if(key == 'm' || key == 'M'){
   println("Slow down the burning rate of the cigarette!");
-  cig.burningRate *= 0.5;
+  cig.burningRate /= 1.5;
   rateUGen.setValue(rateUGen.getValue() - 0.2f);
   dyingRate *= 0.5;
+ }else if(key == 'l' || key == 'L'){
+  player.kill();
  }
 }
 
