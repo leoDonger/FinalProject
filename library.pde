@@ -6,27 +6,21 @@ AudioContext ac;
 SamplePlayer player;
 Gain masterGain;
 Static rateUGen;
-// import ddf.minim.*;
+float dyingRate = 1;
 
-// Minim minim;
-// AudioPlayer player;
-// float playbackSpeed = 1.0;
-// float speedIncrement = 0.01; // Adjust this value for speed change rate
-// int bufferSize;
-// float bufferIndex = 0;
-// float energyBarrier = 0.001;
-// float rateConstant = 0.001;
+;
+
 
 
 
 Cigarette cig;
 Grid grid;
-// CigaretteTip cTip;
+Grid fire;
 int N = 256; // Grid size
 float dt = 1.0 / 120; // Time step
 // float dt = 1.0 / frameRate; // Time step
 float diff = 0.001; // Diffusion rate
-float visc = 0.00001; // Viscosity
+float visc = 0.01; // Viscosity
 boolean paused;
 
 int arraySize = (N+2) * (N+2);
@@ -44,8 +38,52 @@ public class Grid{
   public float[] dens_prev;
   private float[] temp_for_swap;
 
-  public float oxy, fuel, heat;
-  public float time;
+  // Fire
+  public float[] oxy, fuel, heat, heat_prev, oxy_prev;
+  public float energyBarrier, rateConstant, maxRate;
+  public float exothermicness, convectivness;
+  public float viscC, diffC, diffC_Heat, diffC_O2;
+  
+  void updateFire(){
+  // Compute the "burn equation" for each cell (O,F -> H)
+    int nx = n+2;
+    int ny = n+2;
+    for (int i = 0; i < nx; i++){
+      for (int j = 0; j < ny; j++){
+        int index = IX(i, j);
+        float O = oxy[index];
+        float F = fuel[index];
+        float H = heat[index] + 30;  //Ambient temp
+              
+        float reactionRate = (O*F*H - energyBarrier) * rateConstant;
+              
+        if (reactionRate < 0) reactionRate = 0;
+        if (reactionRate > maxRate) reactionRate = maxRate;
+
+        oxy[index] -= reactionRate * dt;
+        fuel[index] -= reactionRate * dt;
+        heat[index] += reactionRate * dt * exothermicness;
+                  
+        if (oxy[index] < 0) oxy[index] = 0;
+        if (fuel[index] < 0) fuel[index] = 0;
+      }
+    }
+
+    // Add an updraft for convection due to heat
+    for (int i=1 ; i<nx ; i++){
+      for (int j=1 ; j<ny ; j++){
+        int index = IX(i, j);
+        v[index] += heat[index] * convectivness; //V is y velocity
+      }
+    }
+
+    // Diffusion and advection
+    vel_step(u,v,u_prev,v_prev,viscC,dt);
+    dens_step(dens,dens_prev,u,v,diffC,dt);
+    dens_step(heat,heat_prev,u,v,diffC_Heat,dt);
+    dens_step(oxy,oxy_prev,u,v,diffC_O2,dt);
+  }
+
 
   public Grid(int n){
     this.n = n;
@@ -56,30 +94,35 @@ public class Grid{
     v_prev = new float[size];
     dens = new float[size];
     dens_prev = new float[size];
+
+    oxy = new float[size];
+    fuel = new float[size];
+    heat = new float[size];
+
+    oxy = new float[arraySize];
+    oxy_prev = new float[arraySize];
+    fuel = new float[arraySize];
+    heat = new float[arraySize];
+    heat_prev = new float[arraySize];
+
+    // Initialize physical constants
+    energyBarrier = 1.0f;
+    rateConstant = 0.1f;
+    maxRate = 0.5f;
+    exothermicness = 5.0f;
+    convectivness = 0.1f;
+    viscC = 0.01f;
+    diffC = 0.1f;
+    diffC_Heat = 0.1f;
+    diffC_O2 = 0.1f;
+
+    // Set initial conditions for oxy, fuel, and heat
+    for (int i = 0; i < arraySize; i++) {
+      oxy[i] = 1.0f; // Max oxygen everywhere
+      fuel[i] = 0.5f; // Some fuel everywhere
+      heat[i] = 0.0f; // No initial heat
+    }
   }
-
-  // void integrate(float dt, float force){
-  //   for (i = 1; i <= n; i++) {
-  //     for (j = 1; j <= n; j++) {
-        
-  //       x[IX(i, j)] = (x0[IX(i, j)] + a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] +
-  //                       x[IX(i, j - 1)] + x[IX(i, j + 1)])) / (1 + 4 * a);
-  //     }
-  //   }
-  // }
-
-
-  // void addSmoke(int x, int y, float d_dens) {
-  //   int index = IX(x, y);
-  //   dens_prev[index] += d_dens;
-  //   // u_prev[index] += d_u;
-  //   // v_prev[index] += d_v;
-  //   // age[index] = 0;  // Reset age for new smoke
-  // }
-
-  // int IX(int i, int j) {
-  //   return i + (n + 2) * j;
-  // }
 
   void addSmoke(int x, int y, float d_u, float d_v, float d_dens) {
     int index = IX(x, y);
@@ -88,7 +131,9 @@ public class Grid{
     v_prev[index] += d_v;
   }
 
-
+  int IX(int i, int j) {
+    return i + (n + 2) * j;
+  }
 
   void add_source(float[] x, float[] s, float dt) {
     for (int i = 0; i < n * n; i++) {
@@ -293,11 +338,14 @@ public class Cigarette{
       cTip.density += 0.05;
     }else if(frontPos > frontLength){
       cTip.density = 0;
+      ps.clear();
+      player.kill();
     }
     ps.addParticle(10, 30);
-    // if(frontPos > 50){
-    //   player.play();
-    // }
+    if(frontPos > 50){
+      ac.start();
+      // player.play();
+    }
   }
 
   void updatePosition(float x, float y){
@@ -322,63 +370,6 @@ public class Cigarette{
 
     ps.run(pos.x - frontLength + frontPos -15, pos.x - frontLength + frontPos+5);
   } 
-
-
-
-}
-
-
-// physics and shape
-public class Line{
- public Vec2 pt1, pt2;
-  
- public Line(Vec2 pt1, Vec2 pt2){
-   this.pt1 = pt1;
-   this.pt2 = pt2;
- }
-
- public Vec2 vec(){
-   return pt2.minus(pt1);
- }
-
- public float length(){
-   return pt1.minus(pt2).length();
- }
-
- public void display(){
-   line(pt1.x, pt1.y, pt2.x, pt2.y);
- }
-
- public String toString(){
-   return pt1.toString();
- }
-}
-
-
-public class Circle{
- public Vec2 center;
- public float radius;
-  
- public Circle(Vec2 center, float radius){
-   this.center = center;
-   this.radius = radius;
- }
-
- public void display(){
-   circle(center.x, center.y, radius*2);
- }
-
- public String toString(){
-   return center.toString();
- }
-
- public Vec2 getTop(){
-  return center.plus(new Vec2(0, -radius));
- }
-
-  public Vec2 getBottom(){
-  return center.plus(new Vec2(0, radius));
- }
 }
 
 
@@ -492,7 +483,6 @@ float clamp(float f, float min, float max){
 }
 
 
-
 public class Particle{
   Vec2 pos;
   Vec2 vel;
@@ -508,14 +498,14 @@ public class Particle{
 
   public void update() {
     pos.add(vel);
-    lifespan -= 10.0;
+    lifespan -= 10.0 * dyingRate;
   }
 
   public void updateColor(float leftBound, float rightBound) {
     float t = map(pos.x, leftBound, rightBound, 0, 1);
     t = constrain(t, 0, 1);
 
-    particleColor = lerpColor(color(128), color(255, 255, 204), t);
+    particleColor = lerpColor(color(50), color(255, 0, 0), t);
   }
 
 
