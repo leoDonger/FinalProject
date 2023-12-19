@@ -1,21 +1,27 @@
 import java.util.Iterator;
 import java.util.Random;
-import ddf.minim.*;
+import beads.*;
 
-Minim minim;
-AudioPlayer player;
-float playbackSpeed = 1.0;
-float speedIncrement = 0.01; // Adjust this value for speed change rate
-int bufferSize;
-float bufferIndex = 0;
-float energyBarrier = 0.001;
-float rateConstant = 0.001;
+AudioContext ac;
+SamplePlayer player;
+Gain masterGain;
+Static rateUGen;
+// import ddf.minim.*;
+
+// Minim minim;
+// AudioPlayer player;
+// float playbackSpeed = 1.0;
+// float speedIncrement = 0.01; // Adjust this value for speed change rate
+// int bufferSize;
+// float bufferIndex = 0;
+// float energyBarrier = 0.001;
+// float rateConstant = 0.001;
 
 
 
 Cigarette cig;
 Grid grid;
-CigaretteTip cTip;
+// CigaretteTip cTip;
 int N = 256; // Grid size
 float dt = 1.0 / 120; // Time step
 // float dt = 1.0 / frameRate; // Time step
@@ -71,6 +77,9 @@ public class Grid{
   //   // age[index] = 0;  // Reset age for new smoke
   // }
 
+  // int IX(int i, int j) {
+  //   return i + (n + 2) * j;
+  // }
 
   void addSmoke(int x, int y, float d_u, float d_v, float d_dens) {
     int index = IX(x, y);
@@ -80,9 +89,6 @@ public class Grid{
   }
 
 
-  int IX(int i, int j) {
-    return i + (n + 2) * j;
-  }
 
   void add_source(float[] x, float[] s, float dt) {
     for (int i = 0; i < n * n; i++) {
@@ -217,8 +223,6 @@ public class Grid{
     set_bnd(N, 2, v);
   }
 
-
-
   void set_bnd(int N, int b, float[] x) {
     int i;
     for (i = 1; i <= N; i++) {
@@ -267,46 +271,60 @@ public class Cigarette{
   public ParticleSystem ps;
   public float frontPos;
 
+  public float totalLength = 550;
+  public float frontLength = 400;
+  public float tipLength = 150;
 
-  public Circle cTipUI;
-  private float totalLength = 550;
-  private float frontLength = 400;
-  private float tipLength = 150;
-
-  public Cigarette(Vec2 pos, CigaretteTip cTip) {
+  public Cigarette(Vec2 pos) {
     this.pos = pos;
     this.cTip = new CigaretteTip(pos.x - frontLength, pos.y);
     frontPos = 0;
     burningRate = 0.4;
+    ps = new ParticleSystem(new Vec2(pos.x - frontLength -10, pos.y));
+
   }
 
-  void draw(){
-    float top = pos.y - 30;
-    float bottom = pos.y + 30;
+  void update(){
+
     if (frontPos <= frontLength){
       frontPos += burningRate;
       cTip.x += burningRate;
+      ps.origin.x += burningRate;
       cTip.density += 0.05;
     }else if(frontPos > frontLength){
       cTip.density = 0;
     }
-
+    ps.addParticle(10, 30);
     // if(frontPos > 50){
     //   player.play();
     // }
+  }
 
-    
+  void updatePosition(float x, float y){
+    pos = new Vec2(x, y);
+    cTip.updatePosition(x - frontLength + frontPos, y);
+    ps.updatePosition(x - frontLength + frontPos  -15, y);
+  }
+
+
+  void draw(){
+    float top = pos.y - 30;
+    float bottom = pos.y + 30;
     fill(255);
     rect(pos.x - frontLength + frontPos, top, frontLength - frontPos, 60);
-    fill(255, 0, 0); // Red color for the lit end
+    fill(255, 0, 0);
     ellipse(pos.x - frontLength + frontPos, pos.y, 20, 60);
 
-
-    fill(139, 69, 19); // Brown color for tobacco
+    fill(139, 69, 19);
     rect(pos.x, top, tipLength, 60);
     ellipse(pos.x, pos.y, 20, 60);
     ellipse(pos.x + tipLength, pos.y, 20, 60);
-  }
+
+    ps.run(pos.x - frontLength + frontPos -15, pos.x - frontLength + frontPos+5);
+  } 
+
+
+
 }
 
 
@@ -479,29 +497,38 @@ public class Particle{
   Vec2 pos;
   Vec2 vel;
   float lifespan;
+  color particleColor;
 
   public Particle(Vec2 p){
     pos = p;
-    vel = new Vec2(random(-20, 20), random(-50, 10));
+    vel = new Vec2(random(0, 2), random(-1, 1));
     lifespan = 255.0;
+    particleColor = color(128);
   }
 
   public void update() {
     pos.add(vel);
-    lifespan -= 2.0;
+    lifespan -= 10.0;
   }
 
+  public void updateColor(float leftBound, float rightBound) {
+    float t = map(pos.x, leftBound, rightBound, 0, 1);
+    t = constrain(t, 0, 1);
+
+    particleColor = lerpColor(color(128), color(255, 255, 204), t);
+  }
+
+
   public void draw() {
-    // stroke(255, lifespan);
-    fill(250, 100, 100, lifespan);
-    circle(pos.x, pos.y, 2.5*2);
+    fill(particleColor, lifespan);
+    noStroke();
+    circle(pos.x, pos.y, 2.5);
   }
 
   public boolean isDead(){
     return lifespan < 0;
   }
 }
-
 
 
 class ParticleSystem {
@@ -513,10 +540,15 @@ class ParticleSystem {
     particles = new ArrayList<Particle>();
   }
 
-  void addParticle() {
-    for(int i = 0; i< 30; i++){
-      Vec2 random = new Vec2(origin.x + random(-20, 20), origin.y + random(-20, 20));
-      particles.add(new Particle(random));
+  void addParticle(float width, float height) {
+    for(int i = 0; i< 40; i++){
+      float angle = random(TWO_PI);
+      float r = sqrt(random(1));
+      float x = r * cos(angle) * width / 2;
+      float y = r * sin(angle) * height / 2;
+
+      Vec2 randomPos = new Vec2(origin.x + x, origin.y + y);
+      particles.add(new Particle(randomPos));
     }
   }
 
@@ -530,6 +562,23 @@ class ParticleSystem {
         it.remove();
       }
     }
+  }
+
+  void run(float leftBound, float rightBound) {
+    Iterator<Particle> it = particles.iterator();
+    while (it.hasNext()) {
+      Particle p = it.next();
+      p.update();
+      p.updateColor(leftBound, rightBound);
+      p.draw();
+      if (p.isDead()) {
+        it.remove();
+      }
+    }
+  }
+
+  void updatePosition(float x, float y){
+    origin = new Vec2(x, y);
   }
   
   void clear(){
