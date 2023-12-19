@@ -73,7 +73,7 @@ public class Grid{
     for (int i=1 ; i<nx ; i++){
       for (int j=1 ; j<ny ; j++){
         int index = IX(i, j);
-        v[index] += heat[index] * convectivness; //V is y velocity
+        v[index] -= heat[index] * convectivness; //V is y velocity
       }
     }
 
@@ -110,11 +110,11 @@ public class Grid{
     rateConstant = 0.1f;
     maxRate = 0.5f;
     exothermicness = 5.0f;
-    convectivness = 0.1f;
-    viscC = 0.01f;
-    diffC = 0.1f;
-    diffC_Heat = 0.1f;
-    diffC_O2 = 0.1f;
+    convectivness = 0.0001f;
+    viscC = 0.001f;
+    diffC = 0.001f;
+    diffC_Heat = 0.001f;
+    diffC_O2 = 0.001f;
 
     // Set initial conditions for oxy, fuel, and heat
     for (int i = 0; i < arraySize; i++) {
@@ -178,7 +178,7 @@ public class Grid{
       }
     }
 
-    set_bnd(N, b, d);
+    set_bnd(n, b, d);
   }
 
   void dens_step(float[] x, float[] x0, float[] u, float[] v, float diff, float dt) {
@@ -246,8 +246,8 @@ public class Grid{
       }
     }
 
-    set_bnd(N, 0, div);
-    set_bnd(N, 0, p);
+    set_bnd(n, 0, div);
+    set_bnd(n, 0, p);
 
     for (k = 0; k < 20; k++) {
       for (i = 1; i <= n; i++) {
@@ -256,7 +256,7 @@ public class Grid{
                             p[IX(i, j - 1)] + p[IX(i, j + 1)]) / 4;
         }
       }
-      set_bnd(N, 0, p);
+      set_bnd(n, 0, p);
     }
     for (i = 1; i <= n; i++) {
       for (j = 1; j <= n; j++) {
@@ -264,22 +264,22 @@ public class Grid{
         v[IX(i, j)] -= 0.5 * (p[IX(i, j + 1)] - p[IX(i, j - 1)]) / h;
       }
     }
-    set_bnd(N, 1, u);
-    set_bnd(N, 2, v);
+    set_bnd(n, 1, u);
+    set_bnd(n, 2, v);
   }
 
   void set_bnd(int N, int b, float[] x) {
     int i;
     for (i = 1; i <= N; i++) {
-      x[IX(0, i)] = b == 1 ? -x[IX(1, i)] : x[IX(1, i)];
-      x[IX(N + 1, i)] = b == 1 ? -x[IX(N, i)] : x[IX(N, i)];
-      x[IX(i, 0)] = b == 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
-      x[IX(i, N + 1)] = b == 2 ? -x[IX(i, N)] : x[IX(i, N)];
+      x[this.IX(0, i)] = b == 1 ? -x[this.IX(1, i)] : x[this.IX(1, i)];
+      x[this.IX(N + 1, i)] = b == 1 ? -x[this.IX(N, i)] : x[this.IX(N, i)];
+      x[this.IX(i, 0)] = b == 2 ? -x[this.IX(i, 1)] : x[this.IX(i, 1)];
+      x[this.IX(i, N + 1)] = b == 2 ? -x[this.IX(i, N)] : x[this.IX(i, N)];
     }
-    x[IX(0, 0)] = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
-    x[IX(0, N + 1)] = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
-    x[IX(N + 1, 0)] = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
-    x[IX(N + 1, N + 1)] = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
+    x[this.IX(0, 0)] = 0.5 * (x[this.IX(1, 0)] + x[this.IX(0, 1)]);
+    x[this.IX(0, N + 1)] = 0.5 * (x[this.IX(1, N + 1)] + x[this.IX(0, N)]);
+    x[this.IX(N + 1, 0)] = 0.5 * (x[this.IX(N, 0)] + x[this.IX(N + 1, 1)]);
+    x[this.IX(N + 1, N + 1)] = 0.5 * (x[this.IX(N, N + 1)] + x[this.IX(N + 1, N)]);
   }
 }
 
